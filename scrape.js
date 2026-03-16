@@ -3,59 +3,57 @@ const fs = require('fs');
 
 (async () => {
   const albumUrl = process.env.ALBUM_URL;
-  if (!albumUrl) {
-    console.error("Missing ALBUM_URL environment variable");
-    process.exit(1);
-  }
-
-  const browser = await chromium.launch();
-  const page = await browser.newPage({
-    viewport: { width: 1920, height: 1080 }
+  const browser = await chromium.launch({ headless: true });
+  const context = await browser.newContext({
+    userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36'
   });
+  const page = await context.newPage();
 
   try {
-    console.log("Connecting to album...");
-    // טעינת הדף והמתנה עד שהרשת תהיה שקטה
-    await page.goto(albumUrl, { waitUntil: 'networkidle' });
-    
-    // המתנה ספציפית לאלמנט שמכיל את התמונות באלבום
+    console.log("Opening Album...");
+    await page.goto(albumUrl, { waitUntil: 'networkidle', timeout: 60000 });
+
+    // המתנה שהתמונות יתחילו להופיע
     await page.waitForSelector('img', { timeout: 10000 });
-    
-    console.log("Scrolling to load images...");
-    // גלילה הדרגתית כדי לוודא שגוגל טוענת את התמונות (Lazy Loading)
-    for (let i = 0; i < 10; i++) {
-        await page.evaluate(() => window.scrollBy(0, 1000));
-        await page.waitForTimeout(1000);
+
+    console.log("Scrolling to trigger lazy load...");
+    // גלילה עמוקה יותר ואיטית יותר
+    for (let i = 0; i < 15; i++) {
+      await page.evaluate(() => window.scrollBy(0, window.innerHeight));
+      await page.waitForTimeout(1000); 
     }
 
-    // חילוץ המידע
-    const imageSources = await page.evaluate(() => {
+    // חילוץ הקישורים עם סינון מתקדם
+    const imageLinks = await page.evaluate(() => {
       const images = Array.from(document.querySelectorAll('img'));
       return images
         .map(img => img.src)
         .filter(src => {
-          // סינון: רק קישורי תמונות של גוגל, ללא תמונות פרופיל וללא אייקונים קטנים
+          // אנחנו רוצים רק תמונות שהן "תוכן" (בדרך כלל עם פרמטרים של גובה/רוחב)
+          // ומתעלמים מתמונות פרופיל, אייקונים ולוגו
           return src.includes('googleusercontent.com') && 
                  !src.includes('profile') && 
-                 !src.includes('placeholder');
+                 !src.includes('lh3.google.com') && // לעיתים לוגואים
+                 src.length > 50; // תמונות אמיתיות בדרך כלל בעלות URL ארוך מאוד
         })
         .map(src => {
-          // קבלת התמונה ברזולוציה גבוהה
-          return src.split('=')[0] + '=w2048'; 
+          // הפיכה לקישור באיכות גבוהה
+          return src.split('=')[0] + '=w2048-h1080';
         });
     });
 
-    const finalLinks = [...new Set(imageSources)];
-    
-    if (finalLinks.length === 0) {
-        console.log("No images found. You might need to check if the album is public.");
-    }
+    const uniqueImages = [...new Set(imageLinks)];
 
-    fs.writeFileSync('list.json', JSON.stringify({ images: finalLinks }, null, 2));
-    console.log(`Successfully found ${finalLinks.length} images.`);
+    console.log(`Success! Found ${uniqueImages.length} actual photos.`);
+    
+    fs.writeFileSync('list.json', JSON.stringify({ 
+      lastUpdate: new Date().toISOString(),
+      count: uniqueImages.length,
+      images: uniqueImages 
+    }, null, 2));
 
   } catch (error) {
-    console.error("Error during scraping:", error);
+    console.error("Scraping failed:", error);
     process.exit(1);
   } finally {
     await browser.close();
