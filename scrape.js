@@ -22,13 +22,23 @@ const fs = require('fs');
     await page.evaluate(() => window.scrollBy(0, document.body.scrollHeight));
     await page.waitForTimeout(3000);
 
-    // חילוץ הקישורים
-    const links = await page.evaluate(() => {
-      const anchors = Array.from(document.querySelectorAll('a'));
-      return anchors
-        .map(a => a.href)
-        .filter(href => href.includes('photo/'));
+    // חילוץ הקישורים הישירים לתמונות
+    const imageData = await page.evaluate(() => {
+      // מוצא את כל התמונות בתוך האלבום
+      const images = Array.from(document.querySelectorAll('img'));
+      return images
+        .map(img => img.src)
+        .filter(src => src.includes('googleusercontent.com'))
+        .map(src => {
+          // טריק: הסיומת =w... קובעת את גודל התמונה. 
+          // נחליף אותה ב-d כדי לקבל את המקור או ב-w2000 כדי לקבל איכות גבוהה
+          return src.split('=')[0] + '=w2048'; 
+        });
     });
+
+    const uniqueImages = [...new Set(imageData)];
+    
+    fs.writeFileSync('list.json', JSON.stringify({ images: uniqueImages }, null, 2));
 
     const uniqueLinks = [...new Set(links)];
     
