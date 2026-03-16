@@ -10,40 +10,50 @@ const fs = require('fs');
 
   const browser = await chromium.launch();
   const page = await browser.newPage({
-    viewport: { width: 1280, height: 1500 } // מסך גבוה כדי לראות יותר תמונות
+    viewport: { width: 1920, height: 1080 }
   });
 
   try {
     console.log("Connecting to album...");
+    // טעינת הדף והמתנה עד שהרשת תהיה שקטה
     await page.goto(albumUrl, { waitUntil: 'networkidle' });
     
-    // המתנה וגלילה הדרגתית כדי לטעון את כל התמונות
-    await page.waitForTimeout(5000);
-    for (let i = 0; i < 5; i++) {
-        await page.evaluate(() => window.scrollBy(0, 2000));
+    // המתנה ספציפית לאלמנט שמכיל את התמונות באלבום
+    await page.waitForSelector('img', { timeout: 10000 });
+    
+    console.log("Scrolling to load images...");
+    // גלילה הדרגתית כדי לוודא שגוגל טוענת את התמונות (Lazy Loading)
+    for (let i = 0; i < 10; i++) {
+        await page.evaluate(() => window.scrollBy(0, 1000));
         await page.waitForTimeout(1000);
     }
 
-    // חילוץ הקישורים הישירים מהתגיות של התמונות (img)
+    // חילוץ המידע
     const imageSources = await page.evaluate(() => {
       const images = Array.from(document.querySelectorAll('img'));
       return images
         .map(img => img.src)
-        // מחפשים רק קישורים של גוגל שמכילים את התוכן של התמונה
-        .filter(src => src.includes('googleusercontent.com'))
+        .filter(src => {
+          // סינון: רק קישורי תמונות של גוגל, ללא תמונות פרופיל וללא אייקונים קטנים
+          return src.includes('googleusercontent.com') && 
+                 !src.includes('profile') && 
+                 !src.includes('placeholder');
+        })
         .map(src => {
-          // ניקוי הפרמטרים בסוף הקישור כדי לקבל איכות גבוהה (w2048)
+          // קבלת התמונה ברזולוציה גבוהה
           return src.split('=')[0] + '=w2048'; 
         });
     });
 
-    // הסרת כפילויות
     const finalLinks = [...new Set(imageSources)];
     
-    // כתיבה לקובץ - שים לב שמשתמשים ב-finalLinks
+    if (finalLinks.length === 0) {
+        console.log("No images found. You might need to check if the album is public.");
+    }
+
     fs.writeFileSync('list.json', JSON.stringify({ images: finalLinks }, null, 2));
-    
     console.log(`Successfully found ${finalLinks.length} images.`);
+
   } catch (error) {
     console.error("Error during scraping:", error);
     process.exit(1);
