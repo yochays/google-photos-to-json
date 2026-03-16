@@ -23,7 +23,7 @@ const fs = require('fs');
   });
 
   const uniqueLinks = [...new Set(links)];
-  fs.writeFileSync('list.json', JSON.stringify({ images: uniqueLinks }, null = 2));
+  fs.writeFileSync('list.json', JSON.stringify({ images: uniqueLinks }, null, 2));
   
   await browser.close();
   console.log(`Found ${uniqueLinks.length} images.`);
