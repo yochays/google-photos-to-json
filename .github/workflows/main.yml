@@ -1,0 +1,29 @@
+name: Scrape Google Photos
+on:
+  workflow_dispatch: # מאפשר לך להריץ את זה ידנית בלחיצת כפתור
+  schedule:
+    - cron: '0 0 * * *' # יריץ את זה אוטומטית בכל יום בחצות
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+      - name: Install dependencies
+        run: npm install playwright
+      - name: Install Browser
+        run: npx playwright install chromium
+      - name: Run Scraper
+        run: node scrape.js
+        env:
+          ALBUM_URL: ${{ secrets.ALBUM_URL }}
+      - name: Commit and Push JSON
+        run: |
+          git config --global user.name "GitHub Action"
+          git config --global user.email "action@github.com"
+          git add list.json
+          git commit -m "Update photo list" || exit 0
+          git push
